@@ -6,8 +6,9 @@ const config = {
   clientId: process.env.AMAZON_CLIENT_ID,
   clientSecret: process.env.AMAZON_CLIENT_SECRET,
   redirectUri: process.env.AMAZON_REDIRECT_URI,
-  region: process.env.AMAZON_REGION || "fe", // North America region by default
+  region: process.env.AMAZON_REGION || "eu", // Use 'eu' for India
   sandbox: process.env.AMAZON_SANDBOX === "true",
+  applicationId: process.env.AMAZON_APP_ID,
 }
 
 // Get the base URL for the Amazon SP API based on the region
@@ -35,9 +36,9 @@ const getBaseUrl = () => {
 
 // Get the authorization URL for Amazon SP API OAuth
 const getAuthUrl = (state) => {
-  const baseUrl = "https://sellercentral.amazon.com/apps/authorize/consent"
+  const baseUrl = "https://sellercentral.amazon.in/apps/authorize/consent"
   const params = new URLSearchParams({
-    application_id: config.clientId,
+    application_id: config.applicationId,
     state,
     version: "beta",
   })
