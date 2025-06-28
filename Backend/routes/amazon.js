@@ -27,7 +27,8 @@ router.get("/auth-url", authenticateToken, async (req, res) => {
 // Handle Amazon OAuth callback
 router.get("/callback", async (req, res) => {
   try {
-    const { code, state } = req.body
+    const code = req.query.code || req.query.spapi_oauth_code
+    const state = req.query.state
 
     if (!code || !state) {
       return res.status(400).json({ message: "Missing required parameters" })
