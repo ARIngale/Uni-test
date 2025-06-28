@@ -124,7 +124,8 @@ const getOrderCount = async (accessToken, sellerId) => {
     })
 
     // Return the order count
-    return response.data.payload.OrdersCount || 0
+    const orders = response.data.payload.Orders || []
+    return orders.length
   } catch (error) {
     console.error("Error getting order count:", error.response?.data || error.message)
     throw new Error("Failed to get order count from Amazon SP API")
@@ -169,10 +170,6 @@ const getRecentOrders = async (accessToken, sellerId) => {
       orderId: order.AmazonOrderId,
       orderDate: order.PurchaseDate?.split("T")[0],
       status: order.OrderStatus,
-      amount:
-        order.OrderTotal?.Amount && order.OrderTotal?.CurrencyCode
-          ? `${order.OrderTotal.CurrencyCode} ${order.OrderTotal.Amount}`
-          : "N/A",
     }))
 
     return formattedOrders
