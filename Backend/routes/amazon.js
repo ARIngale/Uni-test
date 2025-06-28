@@ -57,7 +57,7 @@ router.get("/callback", async (req, res) => {
 
     await user.save()
 
-    res.json({ message: "Amazon account connected successfully" })
+    return res.redirect(`${process.env.FRONTEND_URL}/dashboard`)
   } catch (error) {
     console.error("Error handling Amazon callback:", error)
     res.status(500).json({ message: "Failed to connect Amazon account" })
