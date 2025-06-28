@@ -114,6 +114,7 @@ const getRestrictedDataToken = async (accessToken) => {
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
+          "x-amz-access-token": accessToken,
           "Content-Type": "application/json",
         },
       }
