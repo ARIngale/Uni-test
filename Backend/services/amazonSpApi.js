@@ -102,7 +102,7 @@ const getRestrictedDataToken = async (accessToken) => {
     const response = await axios.post(
       "https://sellingpartnerapi-eu.amazon.com/tokens/2021-03-01/restrictedDataToken",
       {
-        targetApplication: applicationId,
+        targetApplication: config.applicationId,
         restrictedResources: [
           {
             method: "GET",
@@ -125,7 +125,6 @@ const getRestrictedDataToken = async (accessToken) => {
     throw new Error("Failed to fetch restricted data token")
   }
 }
-
 
 // Get the order count from the Amazon SP API
 const getOrderCount = async (accessToken, sellerId) => {
