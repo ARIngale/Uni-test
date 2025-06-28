@@ -25,7 +25,7 @@ router.get("/auth-url", authenticateToken, async (req, res) => {
 })
 
 // Handle Amazon OAuth callback
-router.post("/callback", async (req, res) => {
+router.get("/callback", async (req, res) => {
   try {
     const { code, state } = req.body
 

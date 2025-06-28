@@ -15,7 +15,6 @@ import {
   BarChart3,
 } from "lucide-react"
 import React from 'react'
-import { useSearchParams, useNavigate } from "react-router-dom"
 
 
 interface AmazonAccount {
@@ -36,8 +35,6 @@ const DashboardPage = () => {
   const [amazonAccount, setAmazonAccount] = useState<AmazonAccount>({ connected: false })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
   const [ordersData, setOrdersData] = useState<Order[]>([])
 
   useEffect(() => {
@@ -64,56 +61,6 @@ const DashboardPage = () => {
 
     checkAmazonConnection()
   }, [token])
-
-  useEffect(() => {
-    const code = searchParams.get("code")
-    const state = searchParams.get("state")
-  
-    if (code && state) {
-      const handleAmazonCallback = async () => {
-        setLoading(true)
-        try {
-          const response = await fetch(`${API_URL}/api/amazon/callback`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ code, state }),
-          })
-  
-          if (!response.ok) {
-            throw new Error("Failed to connect Amazon account")
-          }
-  
-          // After successful connection, re-check Amazon status
-          const statusRes = await fetch(`${API_URL}/api/amazon/status`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          })
-  
-          if (statusRes.ok) {
-            const data = await statusRes.json()
-            setAmazonAccount({
-              connected: data.connected,
-              orderCount: data.orderCount,
-            })
-          }
-  
-          // Clean up URL
-          navigate("/dashboard", { replace: true })
-        } catch (err) {
-          console.error("Error handling Amazon callback:", err)
-          setError("Amazon account connection failed")
-        } finally {
-          setLoading(false)
-        }
-      }
-  
-      handleAmazonCallback()
-    }
-  }, [searchParams])
-  
 
   const handleConnectAmazon = async () => {
     setLoading(true)

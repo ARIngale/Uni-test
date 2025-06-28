@@ -27,23 +27,6 @@ mongoose
 app.use("/api/auth", authRoutes)
 app.use("/api/amazon", amazonRoutes)
 
-// Amazon OAuth callback route
-app.get("/amazon/callback", async (req, res) => {
-  const { code, state } = req.query
-
-  if (!code || !state) {
-    return res.redirect(`${process.env.FRONTEND_URL}/dashboard?error=Invalid callback parameters`)
-  }
-
-  try {
-    // Redirect to frontend with the authorization code
-    // The frontend will handle this by making a request to the backend
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard?code=${code}&state=${state}`)
-  } catch (error) {
-    console.error("Amazon callback error:", error)
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard?error=Authentication failed`)
-  }
-})
 
 // Error handling middleware
 app.use((err, req, res, next) => {
