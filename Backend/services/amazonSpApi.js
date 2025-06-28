@@ -97,23 +97,55 @@ const refreshAccessToken = async (refreshToken) => {
   }
 }
 
+const getRestrictedDataToken = async (accessToken) => {
+  try {
+    const response = await axios.post(
+      "https://sellingpartnerapi-eu.amazon.com/tokens/2021-03-01/restrictedDataToken",
+      {
+        targetApplication: applicationId,
+        restrictedResources: [
+          {
+            method: "GET",
+            path: "/orders/v0/orders",
+            dataElements: ["shippingAddress", "buyerInfo"]
+          }
+        ]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    )
+
+    return response.data.restrictedDataToken
+  } catch (error) {
+    console.error("Error getting RDT:", error.response?.data || error.message)
+    throw new Error("Failed to fetch restricted data token")
+  }
+}
+
+
 // Get the order count from the Amazon SP API
 const getOrderCount = async (accessToken, sellerId) => {
   try {
-    // Get the current date and the date 30 days ago
+    // Step 1: Get RDT
+    const restrictedToken = await getRestrictedDataToken(accessToken)
+
+    // Step 2: Set date range
     const now = new Date()
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(now.getDate() - 30)
 
-    // Format the dates as ISO strings
     const createdAfter = thirtyDaysAgo.toISOString()
     const createdBefore = now.toISOString()
 
-    // Make a request to the Orders API
+    // Step 3: Call SP API Orders endpoint using RDT
     const response = await axios.get(`${getBaseUrl()}/orders/v0/orders`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "x-amz-access-token": accessToken,
+        "x-amz-access-token": restrictedToken, // ⬅️ Use the RDT here
         "Content-Type": "application/json",
       },
       params: {
@@ -123,9 +155,9 @@ const getOrderCount = async (accessToken, sellerId) => {
       },
     })
 
-    // Return the order count
-    const orders = response.data.payload.Orders || []
-    return orders.length
+    // Step 4: Return order count
+    const orders = response?.data?.payload?.Orders || []
+    return orders?.length
   } catch (error) {
     console.error("Error getting order count:", error.response?.data || error.message)
     throw new Error("Failed to get order count from Amazon SP API")
@@ -143,12 +175,13 @@ const getRecentOrders = async (accessToken, sellerId) => {
 
     let allOrders = []
     let nextToken = null
+    const restrictedToken = await getRestrictedDataToken(accessToken)
 
     do {
       const response = await axios.get(`${getBaseUrl()}/orders/v0/orders`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          "x-amz-access-token": accessToken,
+          "x-amz-access-token": restrictedToken,
           "Content-Type": "application/json",
         },
         params: {
@@ -159,17 +192,18 @@ const getRecentOrders = async (accessToken, sellerId) => {
         },
       })
 
-      const payload = response.data.payload
-      const orders = payload.Orders || []
+      const payload = response?.data?.payload
+      if (!payload?.Orders?.length) break;
+      const orders = payload?.Orders || []
       allOrders.push(...orders)
 
-      nextToken = payload.NextToken || null
+      nextToken = payload?.NextToken || null
     } while (nextToken)
 
-    const formattedOrders = allOrders.map(order => ({
-      orderId: order.AmazonOrderId,
-      orderDate: order.PurchaseDate?.split("T")[0],
-      status: order.OrderStatus,
+    const formattedOrders = allOrders?.map(order => ({
+      orderId: order?.AmazonOrderId,
+      orderDate: order?.PurchaseDate?.split("T")[0],
+      status: order?.OrderStatus,
     }))
 
     return formattedOrders
