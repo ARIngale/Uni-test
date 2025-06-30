@@ -9,6 +9,7 @@ dotenv.config()
 // Import routes
 const authRoutes = require("./routes/auth")
 const amazonRoutes = require("./routes/amazon")
+const amazonDebugRoutes = require("./routes/amazonDebug") // Add debug routes
 
 // Initialize express app
 const app = express()
@@ -26,6 +27,7 @@ mongoose
 // Routes
 app.use("/api/auth", authRoutes)
 app.use("/api/amazon", amazonRoutes)
+app.use("/api/amazon-debug", amazonDebugRoutes) // Add debug routes
 
 
 // Error handling middleware
