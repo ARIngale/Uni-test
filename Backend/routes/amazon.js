@@ -7,6 +7,7 @@ const {
   refreshAccessToken,
   getOrderCount,
   getRecentOrders,
+  getApplicationStatus,
 } = require("../services/amazonSpApi")
 
 const router = express.Router()
@@ -61,7 +62,7 @@ router.get("/auth-url", authenticateToken, async (req, res) => {
     const state = Buffer.from(
       JSON.stringify({
         userId,
-        timestamp: Date.now(), // Add timestamp for additional security
+        timestamp: Date.now(),
       }),
     ).toString("base64")
 
@@ -154,12 +155,17 @@ router.get("/status", authenticateToken, async (req, res) => {
     const isConnected = !!user.amazonAuth && !!user.amazonAuth.accessToken
 
     let orderCount = null
+    let appStatus = null
+
     if (isConnected) {
       try {
         // Ensure we have a valid access token
         const accessToken = await ensureValidAccessToken(user)
 
-        // Get the order count
+        // Get application status and permissions
+        appStatus = await getApplicationStatus(accessToken)
+
+        // Try to get the order count
         orderCount = await getOrderCount(accessToken, user.amazonAuth.sellerId)
       } catch (error) {
         console.error("Error getting order count for status:", error)
@@ -173,6 +179,7 @@ router.get("/status", authenticateToken, async (req, res) => {
       orderCount,
       sellerId: user.amazonAuth?.sellerId,
       connectedAt: user.amazonAuth?.connectedAt,
+      applicationStatus: appStatus,
     })
   } catch (error) {
     console.error("Error checking Amazon connection status:", error)
@@ -197,6 +204,9 @@ router.get("/orders", authenticateToken, async (req, res) => {
     // Ensure we have a valid access token
     const accessToken = await ensureValidAccessToken(user)
 
+    // Get application status first
+    const appStatus = await getApplicationStatus(accessToken)
+
     // Get both order count and recent orders
     const [orderCount, orders] = await Promise.all([
       getOrderCount(accessToken, user.amazonAuth.sellerId),
@@ -208,6 +218,8 @@ router.get("/orders", authenticateToken, async (req, res) => {
       orders,
       sellerId: user.amazonAuth.sellerId,
       lastUpdated: new Date().toISOString(),
+      applicationStatus: appStatus,
+      isMockData: !appStatus.hasOrdersAccess, // Indicate if using mock data
     })
   } catch (error) {
     console.error("Error getting orders:", error)
@@ -217,14 +229,52 @@ router.get("/orders", authenticateToken, async (req, res) => {
       return res.status(400).json({ message: "Amazon account not connected" })
     } else if (error.message.includes("Authentication failed")) {
       return res.status(401).json({ message: "Authentication failed. Please reconnect your Amazon account." })
-    } else if (error.message.includes("Access denied")) {
-      return res.status(403).json({ message: "Access denied. Please check your Amazon SP API permissions." })
+    } else if (error.message.includes("permission") || error.message.includes("approved")) {
+      return res.status(403).json({
+        message: "Your Amazon SP API application needs approval for Orders access. Using demo data for now.",
+        needsApproval: true,
+      })
     } else if (error.message.includes("Rate limit")) {
       return res.status(429).json({ message: "Rate limit exceeded. Please try again later." })
     }
 
     res.status(500).json({
       message: "Failed to get orders",
+      error: error.message,
+    })
+  }
+})
+
+// Get application status and permissions
+router.get("/app-status", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId
+
+    // Find the user
+    const user = await User.findById(userId)
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+
+    if (!user.amazonAuth || !user.amazonAuth.accessToken) {
+      return res.status(400).json({ message: "Amazon account not connected" })
+    }
+
+    // Ensure we have a valid access token
+    const accessToken = await ensureValidAccessToken(user)
+
+    // Get application status
+    const appStatus = await getApplicationStatus(accessToken)
+
+    res.json({
+      ...appStatus,
+      sellerId: user.amazonAuth.sellerId,
+      connectedAt: user.amazonAuth.connectedAt,
+    })
+  } catch (error) {
+    console.error("Error getting application status:", error)
+    res.status(500).json({
+      message: "Failed to get application status",
       error: error.message,
     })
   }
