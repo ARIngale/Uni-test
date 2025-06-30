@@ -13,6 +13,7 @@ import {
   CheckCircle,
   AlertCircle,
   BarChart3,
+  Unlink,
 } from "lucide-react"
 import React from 'react'
 
@@ -20,6 +21,8 @@ import React from 'react'
 interface AmazonAccount {
   connected: boolean
   orderCount?: number
+  sellerId?: string
+  connectedAt?: string
 }
 
 interface Order {
@@ -36,9 +39,9 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [ordersData, setOrdersData] = useState<Order[]>([])
+  const [lastUpdated, setLastUpdated] = useState<string>("")
 
   useEffect(() => {
-    // Check if user has already connected Amazon account
     const checkAmazonConnection = async () => {
       try {
         const response = await fetch(`${API_URL}/api/amazon/status`, {
@@ -52,15 +55,43 @@ const DashboardPage = () => {
           setAmazonAccount({
             connected: data.connected,
             orderCount: data.orderCount,
+            sellerId: data.sellerId,
+            connectedAt: data.connectedAt,
           })
+        } else {
+          console.error("Failed to check Amazon connection status")
         }
       } catch (err) {
         console.error("Error checking Amazon connection:", err)
       }
     }
 
-    checkAmazonConnection()
+    if (token) {
+      checkAmazonConnection()
+    }
   }, [token])
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const connected = urlParams.get("connected")
+    const errorParam = urlParams.get("error")
+
+    if (connected === "true") {
+      setError("")
+      window.location.replace(window.location.pathname)
+    } else if (errorParam) {
+      switch (errorParam) {
+        case "oauth_failed":
+          setError("OAuth authorization failed. Please try again.")
+          break
+        case "connection_failed":
+          setError("Failed to connect Amazon account. Please try again.")
+          break
+        default:
+          setError("An error occurred during connection. Please try again.")
+      }
+    }
+  }, [])
 
   const handleConnectAmazon = async () => {
     setLoading(true)
@@ -74,7 +105,8 @@ const DashboardPage = () => {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to get Amazon authorization URL")
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to get Amazon authorization URL")
       }
 
       const { authUrl } = await response.json()
@@ -88,32 +120,74 @@ const DashboardPage = () => {
   const handleRefreshOrders = async () => {
     setLoading(true)
     setError("")
-  
+
     try {
       const response = await fetch(`${API_URL}/api/amazon/orders`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
-  
+
       if (!response.ok) {
-        throw new Error("Failed to fetch orders")
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to fetch orders")
       }
-  
+
       const data = await response.json()
-      setAmazonAccount({
+      setAmazonAccount((prev) => ({
+        ...prev,
         connected: true,
         orderCount: data.orderCount,
-      })
+      }))
       setOrdersData(data.orders || [])
+      setLastUpdated(data.lastUpdated || new Date().toISOString())
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred")
     } finally {
       setLoading(false)
     }
   }
-  
 
+  const handleDisconnectAmazon = async () => {
+    if (!confirm("Are you sure you want to disconnect your Amazon account?")) {
+      return
+    }
+
+    setLoading(true)
+    setError("")
+
+    try {
+      const response = await fetch(`${API_URL}/api/amazon/disconnect`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to disconnect Amazon account")
+      }
+
+      setAmazonAccount({ connected: false })
+      setOrdersData([])
+      setLastUpdated("")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatDate = (dateString?: string): string => {
+    if (!dateString) return "N/A"
+    try {
+      return new Date(dateString).toLocaleDateString()
+    } catch {
+      return dateString
+    }
+  }
+  
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navigation */}
@@ -169,6 +243,9 @@ const DashboardPage = () => {
                 <div className="ml-3">
                   <p className="text-sm text-red-800">{error}</p>
                 </div>
+                <button onClick={() => setError("")} className="ml-auto text-red-400 hover:text-red-600">
+                  ×
+                </button>
               </div>
             </div>
           )}
@@ -192,6 +269,9 @@ const DashboardPage = () => {
                       <dd className="text-lg font-medium text-gray-900">
                         {amazonAccount.connected ? "Connected" : "Not Connected"}
                       </dd>
+                      {amazonAccount.sellerId && (
+                        <dd className="text-xs text-gray-500">ID: {amazonAccount.sellerId}</dd>
+                      )}
                     </dl>
                   </div>
                 </div>
@@ -209,7 +289,7 @@ const DashboardPage = () => {
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Total Orders (30 days)</dt>
                       <dd className="text-lg font-medium text-gray-900">
-                        {amazonAccount.connected ? amazonAccount.orderCount || 0 : "—"}
+                        {amazonAccount.connected ? (amazonAccount.orderCount ?? "—") : "—"}
                       </dd>
                     </dl>
                   </div>
@@ -230,6 +310,9 @@ const DashboardPage = () => {
                       <dd className="text-lg font-medium text-gray-900">
                         {amazonAccount.connected ? "Active" : "Inactive"}
                       </dd>
+                      {amazonAccount.connectedAt && (
+                        <dd className="text-xs text-gray-500">Connected: {formatDate(amazonAccount.connectedAt)}</dd>
+                      )}
                     </dl>
                   </div>
                 </div>
@@ -265,7 +348,14 @@ const DashboardPage = () => {
                         <p className="text-sm text-green-600">Your account is synced and ready to use</p>
                       </div>
                     </div>
-                    <ExternalLink className="h-5 w-5 text-green-500" />
+                    <button
+                      onClick={handleDisconnectAmazon}
+                      disabled={loading}
+                      className="inline-flex items-center px-3 py-2 border border-red-300 shadow-sm text-sm leading-4 font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Unlink className="h-4 w-4 mr-2" />
+                      Disconnect
+                    </button>
                   </div>
 
                   {/* Order Analytics */}
@@ -273,7 +363,10 @@ const DashboardPage = () => {
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <h4 className="text-lg font-medium text-gray-900">Order Analytics</h4>
-                        <p className="text-sm text-gray-500">Last 30 days performance</p>
+                        <p className="text-sm text-gray-500">
+                          Last 30 days performance
+                          {lastUpdated && <span className="ml-2">• Updated: {formatDate(lastUpdated)}</span>}
+                        </p>
                       </div>
                       <button
                         onClick={handleRefreshOrders}
@@ -284,16 +377,15 @@ const DashboardPage = () => {
                         {loading ? "Refreshing..." : "Refresh"}
                       </button>
                     </div>
-                    {ordersData.length === 0 && !loading && (
-                      <p className="text-sm text-gray-500 mt-4">No orders found in the last 30 days.</p>
-                    )}
+
+                    {/* Recent Orders Table */}
                     {ordersData.length > 0 && (
                       <div className="mt-6">
                         <h4 className="text-lg font-semibold text-gray-900 mb-3">Recent Orders</h4>
                         <div className="overflow-x-auto">
                           <table className="min-w-full bg-white border border-gray-200 rounded-lg">
                             <thead>
-                              <tr  className="bg-gray-100 text-sm text-gray-700">
+                              <tr className="bg-gray-100 text-sm text-gray-700">
                                 <th className="py-3 px-4 text-left">Order ID</th>
                                 <th className="py-3 px-4 text-left">Date</th>
                                 <th className="py-3 px-4 text-left">Status</th>
@@ -301,22 +393,45 @@ const DashboardPage = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {ordersData.map((order, idx) => (
+                              {ordersData.slice(0, 10).map((order, idx) => (
                                 <tr key={order.orderId} className="border-t text-sm text-gray-700">
-                                  <td className="py-2 px-4">{order.orderId}</td>
+                                  <td className="py-2 px-4 font-mono text-xs">{order.orderId}</td>
                                   <td className="py-2 px-4">{order.orderDate}</td>
-                                  <td className="py-2 px-4">{order.status}</td>
+                                  <td className="py-2 px-4">
+                                    <span
+                                      className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                        order.status === "Shipped"
+                                          ? "bg-green-100 text-green-800"
+                                          : order.status === "Pending"
+                                            ? "bg-yellow-100 text-yellow-800"
+                                            : "bg-gray-100 text-gray-800"
+                                      }`}
+                                    >
+                                      {order.status}
+                                    </span>
+                                  </td>
                                   <td className="py-2 px-4">{order.amount}</td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
+                          {ordersData.length > 10 && (
+                            <p className="text-sm text-gray-500 mt-2 text-center">
+                              Showing 10 of {ordersData.length} orders
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
 
+                    {ordersData.length === 0 && !loading && (
+                      <p className="text-sm text-gray-500 mt-4 text-center py-8">
+                        No orders found in the last 30 days. Click "Refresh" to fetch your latest orders.
+                      </p>
+                    )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
                       <div className="bg-white p-4 rounded-lg border border-gray-200">
                         <div className="flex items-center">
                           <ShoppingBag className="h-8 w-8 text-indigo-500 mr-3" />
